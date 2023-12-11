@@ -12,12 +12,15 @@ class MlFaceRecognizer:
       self.model = None
       self.train_generator = None
       self.val_generator = None
+      self.class_names = []
       
-    def prepare_data(self, train_data_path, validation_data_path = None):
+    def _prepare_data(self, train_data_path, validation_data_path = None):
         # Récupération des chemins des données ...
         current_dir = os.getcwd()
         train_dir = os.path.join(current_dir, train_data_path)
         val_dir = os.path.join(current_dir, validation_data_path)
+        
+        self.class_names = os.listdir(train_dir)
         
         # Préparation des générateurs ...
         train_datagen = ImageDataGenerator(
@@ -44,11 +47,9 @@ class MlFaceRecognizer:
             batch_size=batch_size,
         )
         
-        print(self.train_generator)
-        print('\nSome lines\n')
-        print(self.val_generator)
+        print("data preparation complete ....")
     
-    def create_model(self):
+    def _create_model(self):
         model = Sequential()
         model.add(Conv2D(16, (3, 3), activation='relu', input_shape=(220, 220, 3)))
         model.add(MaxPooling2D((2, 2)))
@@ -64,8 +65,10 @@ class MlFaceRecognizer:
         model.add(Dense(5, activation='softmax'))
         
         self.model = model
-    
-    def train_model(self):
+        
+        print("model creation complete ....")
+           
+    def _train_model(self):
         # Compilation du modèle ...
         self.model.compile(
             optimizer='adam',
@@ -88,8 +91,10 @@ class MlFaceRecognizer:
         plt.title('model loss')
         plt.legend(['train', 'test'], loc='upper left')
         plt.show()
+        
+        print("model training complete ....")
     
-    def evaluate_model(self, test_data_path):
+    def evaluate(self, test_data_path):
         batch_size = 120
         target_size = (220, 220)
         
@@ -112,27 +117,44 @@ class MlFaceRecognizer:
         print(f'Test loss     : {score[0]:4.4f}')
         print(f'Test accuracy : {score[1]:4.4f}')
         
+        print("\model evaluation complete ....")
+        
     def train(self, train_data_path, validation_data_path):
-        self.prepare_data(train_data_path, validation_data_path)
-        self.create_model()
-        self.train_model()
+        self._prepare_data(train_data_path, validation_data_path)
+        self._create_model()
+        self._train_model()
       
-    def save(self, path):
-        self.model.save(path)
+    def save(self, model_path):
+        path = model_path.split('/')[0]        
+        model_name = model_path.split('/')[-1].split('.')[0]
+        
+        with open(f'{path}/labels_{model_name}.txt', 'w') as f:
+            for index, label in enumerate(self.class_names):
+                f.write(f'{index} {label}\n')
+            f.close()
+        
+        self.model.save(model_path)
     
-    def read(self, path):
+    def read(self, model_path):
+        path = model_path.split('/')[0]        
+        model_name = model_path.split('/')[-1].split('.')[0]
+        
+        # load class names
+        with open(f'{path}/labels_{model_name}.txt', 'r') as f:
+            self.class_names = [a[:-1].split(' ')[1] for a in f.readlines()]
+            f.close()
+        
         # load specifical model 
-        self.model = load_model(path, compile=False)
+        self.model = load_model(model_path, compile=False)
         print("done!!!")
     
-    def predict(self, image):
-        # load class names
-        with open('./models/labels.txt', 'r') as f:
-            class_names = [a[:-1].split(' ')[1] for a in f.readlines()]
-            f.close()
+    def predict(self, image_path):
             
-        # convert image to (224, 224)
-        image = ImageOps.fit(image, (224, 224), Image.Resampling.LANCZOS)
+        # Open the image   
+        image = Image.open(image_path).convert('RGB')
+            
+        # convert image to (220, 220)
+        image = ImageOps.fit(image, (220, 220), Image.Resampling.LANCZOS)
 
         # convert image to numpy array
         image_array = np.asarray(image)
@@ -141,7 +163,7 @@ class MlFaceRecognizer:
         normalized_image_array = (image_array.astype(np.float32) / 127.5) - 1
 
         # set model input
-        data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
+        data = np.ndarray(shape=(1, 220, 220, 3), dtype=np.float32)
         data[0] = normalized_image_array
 
         # make prediction
@@ -149,12 +171,7 @@ class MlFaceRecognizer:
 
         index = np.argmax(prediction)
         
-        class_name = class_names[index]
+        class_name = self.class_names[index]
         confidence_score = prediction[0][index]
 
         return class_name, confidence_score
-        
-        # classify image
-        label, score = classify(image, model, class_names)
-        
-        return (label, score)

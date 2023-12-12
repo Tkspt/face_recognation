@@ -4,14 +4,17 @@ from PIL import Image , ImageOps
 import matplotlib.pyplot as plt
 from keras.models import load_model
 from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, Dropout, BatchNormalization, Flatten, Dense
+from keras.layers import Conv2D, MaxPooling2D, Dropout, Flatten, Dense
 from keras.preprocessing.image import ImageDataGenerator
+from keras.callbacks import EarlyStopping
+from kerastuner.tuners import RandomSearch
 
 class MlFaceRecognizer:
     def __init__(self):
       self.model = None
       self.train_generator = None
       self.val_generator = None
+      self.tuner = None
       self.class_names = []
       
     def _prepare_data(self, train_data_path, validation_data_path = None):
@@ -50,25 +53,79 @@ class MlFaceRecognizer:
         print("data preparation complete ....")
     
     def _create_model(self):
-        model = Sequential()
-        model.add(Conv2D(16, (3, 3), activation='relu', input_shape=(220, 220, 3)))
-        model.add(MaxPooling2D((2, 2)))
+        def build_model(hp):
+            model = Sequential()
+            nb_neurons1 = hp.Int('nb_neurons1', min_value=20, max_value=128, step=20)
+            nb_neurons2 = hp.Int('nb_neurons2', min_value=20, max_value=128, step=20)
+            dense_neurons = hp.Int('dense_neurons', min_value=100, max_value=300, step=20)
+            dropout = hp.Float('dropout_1', min_value=0.3, max_value=0.5, step=0.1)
+            has_dropout = hp.Boolean("dopout")
+            epochs = hp.Int('epochs', min_value=5, max_value=15, step=1, default=10)
+            learning_rate = hp.Choice('learning_rate', values=[0.001, 0.0001, 0.00001])
+            output = 5
 
-        model.add(Conv2D(32, (3, 3), activation='relu'))
-        model.add(MaxPooling2D((2, 2)))
+            model.add(Conv2D(nb_neurons1, return_sequences=True))
 
-        model.add(Conv2D(64, (3, 3), activation='relu'))
-        model.add(MaxPooling2D((2, 2)))
+            if has_dropout:
+                model.add(Dropout(dropout))
 
-        model.add(Flatten())
-        model.add(Dense(100, activation='relu'))
-        model.add(Dense(5, activation='softmax'))
+            model.add(Conv2D(nb_neurons2))
+
+            if has_dropout:
+                model.add(Dropout(dropout))
+
+            model.add(Flatten())
+
+            model.add(Dense(dense_neurons, activation='relu'))
+
+            model.add(Dense(output, activation='softmax'))
+            
+            model.compile(
+                loss='binary_crossentropy',
+                optimizer=tf.keras.optimizers.RMSprop(learning_rate=learning_rate),
+                metrics=['accuracy'],
+            )
+
+            return model
+
+        tuner = RandomSearch(
+            build_model,
+            objective='val_accuracy',
+            max_trials=3,
+            directory='tuner_logs',
+            project_name='my_text_classification'
+        )
+
+        tuner.search(self.train_generator, epochs=10, validation_data=self.val_generator, batch_size=64)
+        best_hps = tuner.get_best_hyperparameters()[0]
+
+        self.tuner = tuner
+        self.model = tuner.hypermodel.build(best_hps)
+
+
+    # def _create_model(self):
+    #     output = len(self.class_names)
+    #     model = Sequential()
+    #     model.add(Conv2D(16, (3, 3), activation='relu', input_shape=(220, 220, 3)))
+    #     model.add(MaxPooling2D((2, 2)))
+
+    #     model.add(Conv2D(32, (3, 3), activation='relu'))
+    #     model.add(MaxPooling2D((2, 2)))
+
+    #     model.add(Conv2D(64, (3, 3), activation='relu'))
+    #     model.add(MaxPooling2D((2, 2)))
+
+    #     model.add(Flatten())
+    #     model.add(Dense(100, activation='relu'))
+    #     model.add(Dense(output, activation='softmax'))
         
-        self.model = model
+    #     self.model = model
         
-        print("model creation complete ....")
+    #     print("model creation complete ....")
            
     def _train_model(self):
+        early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+        
         # Compilation du modèle ...
         self.model.compile(
             optimizer='adam',

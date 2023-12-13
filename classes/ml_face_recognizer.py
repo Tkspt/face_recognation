@@ -4,14 +4,17 @@ from PIL import Image , ImageOps
 import matplotlib.pyplot as plt
 from keras.models import load_model
 from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, Dropout, BatchNormalization, Flatten, Dense
+from keras.layers import Conv2D, MaxPooling2D, Dropout, Flatten, Dense
 from keras.preprocessing.image import ImageDataGenerator
+from keras.callbacks import EarlyStopping
+from kerastuner.tuners import RandomSearch
 
 class MlFaceRecognizer:
     def __init__(self):
       self.model = None
       self.train_generator = None
       self.val_generator = None
+      self.tuner = None
       self.class_names = []
       
     def _prepare_data(self, train_data_path, validation_data_path = None):
@@ -48,7 +51,8 @@ class MlFaceRecognizer:
         )
         
         print("\ndata preparation complete ....\n")
-    
+
+
     def _create_model(self):
         output = len(self.class_names)
         model = Sequential()
@@ -67,9 +71,9 @@ class MlFaceRecognizer:
         
         self.model = model
         
-        print("model creation complete ....")
+        print("\nmodel creation complete ....\n")
            
-    def _train_model(self):
+    def _train_model(self):        
         # Compilation du modèle ...
         self.model.compile(
             optimizer='adam',
@@ -93,7 +97,7 @@ class MlFaceRecognizer:
         plt.legend(['train', 'test'], loc='upper left')
         plt.show()
         
-        print("model training complete ....")
+        print("\nmodel training complete ....\n")
     
     def evaluate(self, test_data_path):
         batch_size = 120
@@ -118,7 +122,7 @@ class MlFaceRecognizer:
         print(f'Test loss     : {score[0]:4.4f}')
         print(f'Test accuracy : {score[1]:4.4f}')
         
-        print("\model evaluation complete ....")
+        print("\nmodel evaluation complete ....\n")
         
     def train(self, train_data_path, validation_data_path):
         self._prepare_data(train_data_path, validation_data_path)

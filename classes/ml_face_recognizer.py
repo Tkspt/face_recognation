@@ -47,9 +47,10 @@ class MlFaceRecognizer:
             batch_size=batch_size,
         )
         
-        print("data preparation complete ....")
+        print("\ndata preparation complete ....\n")
     
     def _create_model(self):
+        output = len(self.class_names)
         model = Sequential()
         model.add(Conv2D(16, (3, 3), activation='relu', input_shape=(220, 220, 3)))
         model.add(MaxPooling2D((2, 2)))
@@ -62,7 +63,7 @@ class MlFaceRecognizer:
 
         model.add(Flatten())
         model.add(Dense(100, activation='relu'))
-        model.add(Dense(5, activation='softmax'))
+        model.add(Dense(output, activation='softmax'))
         
         self.model = model
         
